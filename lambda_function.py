@@ -260,14 +260,28 @@ def format_tickets_for_ai_agent(tickets: List[Dict[str, Any]], customer_phone: s
     else:
         ai_context = "Customer has no open tickets in the last 7 days"
 
+    # CRITICAL: Convert all values to strings for Amazon Connect STRING_MAP compatibility
     response = {
-        'success': True,
+        'success': 'true',  # String instead of boolean
         'customer_phone': customer_phone,
-        'search_days_back': SEARCH_DAYS_BACK,
-        'open_tickets_count': len(formatted_tickets),
-        'tickets': formatted_tickets,
+        'search_days_back': str(SEARCH_DAYS_BACK),  # Convert to string
+        'open_tickets_count': str(len(formatted_tickets)),  # Convert to string
+        'tickets': json.dumps(formatted_tickets),  # Convert array to JSON string
         'ai_agent_context': ai_context
     }
+
+    # Add individual ticket IDs as separate string fields (up to 5 tickets)
+    # This makes it easy for Contact Flow and AI Agent to access without parsing JSON
+    for i, ticket in enumerate(formatted_tickets[:5], start=1):
+        response[f'ticket_id_{i}'] = ticket['ticket_id']
+        response[f'ticket_subject_{i}'] = ticket['subject']
+        response[f'ticket_status_{i}'] = ticket['status']
+
+    # Add comma-separated list of all ticket IDs for easy reference
+    if formatted_tickets:
+        response['ticket_ids_csv'] = ','.join([t['ticket_id'] for t in formatted_tickets])
+    else:
+        response['ticket_ids_csv'] = ''
 
     return response
 
@@ -312,7 +326,7 @@ def lambda_handler(event, context):
         if not ZENDESK_OAUTH_SECRET_NAME:
             logger.error("Missing required environment variable: ZENDESK_OAUTH_SECRET_NAME")
             return {
-                'success': False,
+                'success': 'false',  # String
                 'error': 'Lambda misconfigured: Missing ZENDESK_OAUTH_SECRET_NAME'
             }
 
@@ -344,7 +358,7 @@ def lambda_handler(event, context):
         if not customer_phone:
             logger.error("No customer phone number provided in event")
             return {
-                'success': False,
+                'success': 'false',  # String
                 'error': 'Missing customer phone number in event'
             }
 
@@ -364,7 +378,7 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Unhandled exception in lambda_handler: {str(e)}", exc_info=True)
         return {
-            'success': False,
+            'success': 'false',  # String
             'error': str(e),
             'customer_phone': customer_phone if 'customer_phone' in locals() else 'unknown'
         }
@@ -402,10 +416,12 @@ if __name__ == '__main__':
         print("\nResult:")
         print(json.dumps(result, indent=2))
 
-        if result['success']:
+        if result['success'] == 'true':  # Compare as string
             print("\n" + "=" * 80)
             print("✓ Test completed successfully")
             print(f"✓ Found {result['open_tickets_count']} open tickets")
+            if result.get('ticket_ids_csv'):
+                print(f"✓ Ticket IDs: {result['ticket_ids_csv']}")
             print(f"\n✓ AI Agent Context:")
             print(f"  {result['ai_agent_context']}")
             print("=" * 80)

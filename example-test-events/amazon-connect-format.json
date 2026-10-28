@@ -1,0 +1,13 @@
+{
+  "Details": {
+    "ContactData": {
+      "CustomerEndpoint": {
+        "Address": "+447425162654"
+      },
+      "Attributes": {
+        "search_days_back": "7",
+        "max_tickets": "5"
+      }
+    }
+  }
+}
